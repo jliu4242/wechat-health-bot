@@ -4,7 +4,7 @@ import time
 import xml.etree.ElementTree as ET
 from flask import Flask, request, make_response
 
-TOKEN = os.getenv("WECHAT_TOKEN", "your_token_here")
+TOKEN = os.getenv("WECHAT_TOKEN")
 
 app = Flask(__name__)
 
