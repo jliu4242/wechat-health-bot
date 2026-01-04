@@ -7,8 +7,9 @@ from flask import Flask, request, make_response
 
 app = Flask(__name__)
 
-# Only secret needed: the token you set in WeChat Platform for server verification
-WECHAT_TOKEN = os.environ.get("WECHAT_TOKEN", "")
+# Only secret needed: the token you set in WeChat Platform for server verification.
+# Strip to avoid mismatch from accidental whitespace in the env var.
+WECHAT_TOKEN = os.environ.get("WECHAT_TOKEN", "").strip()
 
 
 def _verify_signature(signature: str, timestamp: str, nonce: str) -> bool:
@@ -18,7 +19,8 @@ def _verify_signature(signature: str, timestamp: str, nonce: str) -> bool:
     pieces = [WECHAT_TOKEN, timestamp, nonce]
     pieces.sort()
     check_str = "".join(pieces).encode("utf-8")
-    return hashlib.sha1(check_str).hexdigest() == signature
+    expected = hashlib.sha1(check_str).hexdigest()
+    return expected == signature
 
 
 def _build_text_reply(to_user: str, from_user: str, content: str) -> str:
@@ -35,11 +37,13 @@ def _build_text_reply(to_user: str, from_user: str, content: str) -> str:
 
 
 @app.route("/wechat", methods=["GET"])
-def wechat_verify():
+def wechat_verify(echostr=None):
+    # WeChat sends signature/timestamp/nonce/echostr as query params; echo back echostr on success.
     signature = request.args.get("signature", "")
     timestamp = request.args.get("timestamp", "")
     nonce = request.args.get("nonce", "")
-    echostr = request.args.get("echostr", "")
+    if echostr is None:
+        echostr = request.args.get("echostr", "")
     if not _verify_signature(signature, timestamp, nonce):
         return "invalid signature", 403
     return echostr
