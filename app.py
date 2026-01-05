@@ -4,12 +4,18 @@ import time
 from xml.etree import ElementTree as ET
 
 from flask import Flask, request, make_response
+from openai import OpenAI
 
 app = Flask(__name__)
 
 # Only secret needed: the token you set in WeChat Platform for server verification.
 # Strip to avoid mismatch from accidental whitespace in the env var.
 WECHAT_TOKEN = os.environ.get("WECHAT_TOKEN", "").strip()
+# OpenAI key for generating replies to user messages.
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo").strip()
+
+_openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 
 def _verify_signature(signature: str, timestamp: str, nonce: str) -> bool:
@@ -34,6 +40,29 @@ def _build_text_reply(to_user: str, from_user: str, content: str) -> str:
         f"<Content><![CDATA[{content}]]></Content>"
         "</xml>"
     )
+
+
+def _chat_reply(user_text: str) -> str:
+    """Send the user's text to OpenAI and return the response text."""
+    if not _openai_client or not OPENAI_MODEL:
+        return "OpenAI is not configured."
+
+    try:
+        completion = _openai_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant replying succinctly to WeChat text messages.",
+                },
+                {"role": "user", "content": user_text},
+            ],
+            max_tokens=200,
+            temperature=0.7,
+        )
+        return completion.choices[0].message.content.strip()
+    except Exception:
+        return "Sorry, I could not generate a reply right now."
 
 
 @app.route("/wechat", methods=["GET"])
@@ -67,7 +96,7 @@ def wechat_message():
     if msg_type != "text":
         reply_content = "Only text messages are supported right now."
     else:
-        reply_content = f"You said: {content}"
+        reply_content = _chat_reply(content)
 
     reply_xml = _build_text_reply(from_user, to_user, reply_content)
     resp = make_response(reply_xml)
