@@ -3,8 +3,8 @@ import os
 import time
 from xml.etree import ElementTree as ET
 
+import openai
 from flask import Flask, request, make_response
-from openai import OpenAI
 
 app = Flask(__name__)
 
@@ -15,7 +15,10 @@ WECHAT_TOKEN = os.environ.get("WECHAT_TOKEN", "").strip()
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo").strip()
 
-_openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+if OPENAI_API_KEY:
+    openai.api_key = OPENAI_API_KEY
+else:
+    openai.api_key = None
 
 
 def _verify_signature(signature: str, timestamp: str, nonce: str) -> bool:
@@ -44,11 +47,11 @@ def _build_text_reply(to_user: str, from_user: str, content: str) -> str:
 
 def _chat_reply(user_text: str) -> str:
     """Send the user's text to OpenAI and return the response text."""
-    if not _openai_client or not OPENAI_MODEL:
+    if not openai.api_key or not OPENAI_MODEL:
         return "OpenAI is not configured."
 
     try:
-        completion = _openai_client.chat.completions.create(
+        completion = openai.ChatCompletion.create(
             model=OPENAI_MODEL,
             messages=[
                 {
@@ -60,7 +63,7 @@ def _chat_reply(user_text: str) -> str:
             max_tokens=200,
             temperature=0.7,
         )
-        return completion.choices[0].message.content.strip()
+        return completion.choices[0].message["content"].strip()
     except Exception:
         return "Sorry, I could not generate a reply right now."
 
